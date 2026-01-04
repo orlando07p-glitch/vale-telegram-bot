@@ -2,8 +2,12 @@ import sqlite3
 import os
 from telegram.ext import Application, MessageHandler, filters
 from openai import OpenAI
+import httpx
 
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+client = OpenAI(
+    api_key=OPENAI_API_KEY,
+    http_client=httpx.Client(timeout=30)
+)
 
 # ---- MEMORIA ----
 db = sqlite3.connect("memory.db", check_same_thread=False)
