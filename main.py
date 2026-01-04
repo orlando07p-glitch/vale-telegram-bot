@@ -1,8 +1,12 @@
-import sqlite3
 import os
-from telegram.ext import Application, MessageHandler, filters
-from openai import OpenAI
 import httpx
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
+from openai import OpenAI
+
+#=== VARIABLES DE ENTORNO ===
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+OPENAI_API_KEY = os. getenv("OPENAI_API_KEY")
 
 client = OpenAI(
     api_key=OPENAI_API_KEY,
