@@ -120,6 +120,8 @@ async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MAIN (AQUÍ ESTABA EL ERROR)
 # ===============================
 def main():
+    Thread(target=start_web_server, daemon=True).start()
+
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply))
     app.run_polling()
