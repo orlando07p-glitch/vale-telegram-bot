@@ -1,6 +1,12 @@
+# ===============================
+# IMPORTS (TODOS ARRIBA)
+# ===============================
 import os
 import sqlite3
 import httpx
+from threading import Thread
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 from openai import OpenAI
@@ -49,7 +55,7 @@ Rafael Pesántez:
 - 34 años, cumple el 22 de octubre
 - Vive en Azogues, Ecuador
 - Economista, profesor de física y matemática
-- Trabaja en la Unidad Educativa Une
+- Trabaja en la Unidad Educativa UNE
 - Casado con Marina
 - Padre de Camila (Cami) y Paula (Pau)
 - Guitarrista eléctrico virtuoso
@@ -108,8 +114,8 @@ async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_text = response.choices[0].message.content
 
     new_memory = (
-        past_memory
-        + f"\nUsuario: {user_message}\nVale: {reply_text}"
+        past_memory +
+        f"\nUsuario: {user_message}\nVale: {reply_text}"
     )[-4000:]
 
     save_memory(user_id, new_memory)
@@ -117,7 +123,21 @@ async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply_text)
 
 # ===============================
-# MAIN (AQUÍ ESTABA EL ERROR)
+# SERVIDOR WEB FALSO (RENDER)
+# ===============================
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Vale bot is running")
+
+def start_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server.serve_forever()
+
+# ===============================
+# MAIN
 # ===============================
 def main():
     Thread(target=start_web_server, daemon=True).start()
@@ -129,21 +149,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-# ===============================
-# SERVIDOR WEB FALSO PARA RENDER
-# ===============================
-from threading import Thread
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import os
-
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Vale bot is running")
-
-def start_web_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    server.serve_forever()
