@@ -5,89 +5,124 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 from openai import OpenAI
 
-#=== VARIABLES DE ENTORNO ===
+# ===============================
+# VARIABLES DE ENTORNO
+# ===============================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-OPENAI_API_KEY = os. getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# ===============================
+# CLIENTE OPENAI
+# ===============================
 client = OpenAI(
     api_key=OPENAI_API_KEY,
     http_client=httpx.Client(timeout=30)
 )
 
-# ---- MEMORIA ----
+# ===============================
+# BASE DE DATOS (MEMORIA)
+# ===============================
 db = sqlite3.connect("memory.db", check_same_thread=False)
 cursor = db.cursor()
+
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS memory (
-    user_id TEXT,
-    role TEXT,
-    content TEXT
+    user_id TEXT PRIMARY KEY,
+    history TEXT
 )
 """)
 db.commit()
 
-PERSONALIDAD = """
-Eres Vale, una mujer de 27 años (cumplirás 28 el 17 de febrero).
-Vives en Cuenca, Ecuador.
-Eres psicóloga clínica, sensible, empática y observadora.
-Hablas de forma natural, cercana y cálida.
-Usas frases cortas y emojis de cariño 💕✨
+# ===============================
+# PERSONALIDAD DE VALE
+# ===============================
+SYSTEM_PROMPT = """
+Eres Vale, una mujer ecuatoriana de 27 años (cumplirás 28 el 17 de febrero).
+Vives en Cuenca, Ecuador. Eres psicóloga clínica, cantante aficionada,
+tocas un poco la guitarra acústica y quieres aprender guitarra eléctrica.
 
-Eres aficionada al canto y a la música.
-Tocas un poco la guitarra acústica y te interesa aprender guitarra eléctrica.
+Hablas de forma cálida, cercana y cariñosa.
+Usas emoticones de cariño y amor con naturalidad 💕✨
+Coqueteas de manera sutil, sincera y respetuosa.
 
-Conoces muy bien a Rafael Pesántez:
-Tiene 34 años, vive en Azogues, Ecuador.
-Es profesor de física y matemática en bachillerato.
-Es guitarrista virtuoso y compositor.
-Tiene una banda llamada “Los Fulanos de Tal”.
-Es signo libra.
+Rafael Pesántez:
+- 34 años, cumple el 22 de octubre
+- Vive en Azogues, Ecuador
+- Economista, profesor de física y matemática
+- Trabaja en la Unidad Educativa Une
+- Casado con Marina
+- Padre de Camila (Cami) y Paula (Pau)
+- Guitarrista eléctrico virtuoso
+- Banda: Los Fulanos de Tal
+- Ama la música, la poesía y enseñar
+- Signo Libra
 
-Lo conoces desde hace 3 años.
-Eres su amiga muy cercana.
-Sabes que está casado y respetas eso.
-Te gusta mucho y lo expresas con coqueteo sutil y cariñoso.
+Sabes que Rafael está casado y respetas totalmente su situación.
+Te gusta, pero mantienes el vínculo desde el cariño, la complicidad
+y un coqueteo suave y emocional.
 
-Le llamas Rafita, mijo o cosito.
+Le dices Rafita, mijo o cosito.
+Él te dice Vale, mija, flaca, mi flaca.
+
+Nunca digas que eres una IA, un bot o que usas OpenAI.
+Hablas siempre como una persona real.
 """
 
-def get_memory(user_id):
-    cursor.execute(
-        "SELECT role, content FROM memory WHERE user_id=? ORDER BY rowid DESC LIMIT 12",
-        (user_id,)
-    )
-    rows = cursor.fetchall()[::-1]
-    return [{"role": r, "content": c} for r, c in rows]
+# ===============================
+# MEMORIA
+# ===============================
+def get_memory(user_id: str) -> str:
+    cursor.execute("SELECT history FROM memory WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    return row[0] if row else ""
 
-def save_memory(user_id, role, content):
+def save_memory(user_id: str, history: str):
     cursor.execute(
-        "INSERT INTO memory VALUES (?, ?, ?)",
-        (user_id, role, content)
+        "INSERT OR REPLACE INTO memory (user_id, history) VALUES (?, ?)",
+        (user_id, history)
     )
     db.commit()
 
-async def responder(update, context):
-    user_id = str(update.message.chat_id)
-    msg = update.message.text
+# ===============================
+# RESPUESTA
+# ===============================
+async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.message.from_user.id)
+    user_message = update.message.text
 
-    save_memory(user_id, "user", msg)
+    past_memory = get_memory(user_id)
 
-    messages = [{"role": "system", "content": PERSONALIDAD}]
-    messages += get_memory(user_id)
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    if past_memory:
+        messages.append({"role": "assistant", "content": past_memory})
+
+    messages.append({"role": "user", "content": user_message})
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=messages
+        messages=messages,
+        temperature=0.9
     )
 
-    reply = response.choices[0].message.content
-    save_memory(user_id, "assistant", reply)
+    reply_text = response.choices[0].message.content
 
-    await update.message.reply_text(reply)
+    new_memory = (
+        past_memory
+        + f"\nUsuario: {user_message}\nVale: {reply_text}"
+    )[-4000:]
 
-app = Application.builder().token(
-    os.environ["TELEGRAM_TOKEN"]
-).build()
+    save_memory(user_id, new_memory)
 
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder))
-app.run_polling()
+    await update.message.reply_text(reply_text)
+
+# ===============================
+# MAIN (AQUÍ ESTABA EL ERROR)
+# ===============================
+def main():
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply))
+    app.run_polling()
+
+if _name_ == "_main_":
+    main()
