@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import httpx
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
